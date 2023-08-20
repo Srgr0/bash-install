@@ -18,15 +18,18 @@
 # DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
+#スクリプトのバージョン
 version="3.2.0";
 
+#スクリプトの概要を表示
 tput setaf 4;
 echo "";
 echo "Misskey auto setup for Ubuntu";
 echo " v$version";
 echo "";
 
-#region initial check
+#Linuxでない場合は終了、Ubuntu以外では警告
+#ちゃんと判定できているのか不明
 tput setaf 2;
 echo "Check: Linux;"
 if [ "$(command -v uname)" ]; then
@@ -47,6 +50,7 @@ else
 	exit 1;
 fi
 
+#rootかどうか確認
 tput setaf 2;
 echo "Check: root user;";
 if [ "$(whoami)" != 'root' ]; then
@@ -58,6 +62,8 @@ else
 	echo "	OK. I am root user.";
 fi
 
+#アーキテクチャの確認
+#amd64とarm64に対応、それ以外は終了
 tput setaf 2;
 echo "Check: arch;";
 case $(uname -m) in
@@ -77,12 +83,11 @@ case $(uname -m) in
 		exit 1;
 		;;
 esac
-#endregion
 
-#region user input
-#region method
+#オプション選択
 tput setaf 3;
 echo "";
+#docker or systemd
 echo "Install Method";
 tput setaf 7;
 echo "Do you use systemd to run Misskey?:";
@@ -107,10 +112,12 @@ case "$yn" in
 		misskey_localhost=localhost
 		;;
 esac
-#endregion
 
+##dockerの場合
 if [ $method == "docker" ]; then
+	#amd64の場合
 	if [ $arch == "amd64" ]; then
+ 		#dockerhubから持ってくるか、ビルドするか
 		echo "Do you use image from Docker Hub?:";
 		echo "Y = To use Docker Hub image / N = To build Docker image in this machine"
 		read -r -p "[Y/n] > " yn
@@ -127,6 +134,8 @@ if [ $method == "docker" ]; then
 				read -r -p "> " -e -i "misskey/misskey:latest" docker_repository;
 				;;
 		esac
+  	#arm64ならビルド
+   	#今はimageあるのでは？
 	else
 		echo "We should build docker manually because this is arm64 machine.";
 		method=docker;
@@ -135,26 +144,35 @@ if [ $method == "docker" ]; then
 
 fi
 
+#misskeyの設定
 tput setaf 3;
 echo "Misskey setting";
 tput setaf 7;
 misskey_directory=misskey
 
+##dockerhubでない場合
+#リポジトリの指定
+#docker(build)の場合は？
 if [ $method != "docker_hub" ]; then
+	#リポジトリ指定
 	echo "Repository url where you want to install:"
 	read -r -p "> " -e -i "https://github.com/misskey-dev/misskey.git" repository;
+ 	#クローン先ディレクトリ
 	echo "The name of a new directory to clone:"
 	read -r -p "> " -e -i "misskey" misskey_directory;
+ 	#ブランチ
 	echo "Branch or Tag"
 	read -r -p "> " -e -i "master" branch;
 fi
 
+#misskeyを動かすユーザー名
 tput setaf 3;
 echo "";
 echo "Enter the name of user with which you want to execute Misskey:";
 tput setaf 7;
 read -r -p "> " -e -i "misskey" misskey_user;
 
+#ホスト名
 tput setaf 3;
 echo "";
 echo "Enter host where you want to install Misskey:";
@@ -164,25 +182,29 @@ tput setaf 7;
 hostarr=(${host//./ });
 echo "OK, let's install $host!";
 
-#region nginx
+#nginxの設定
 tput setaf 3;
 echo "";
 echo "Nginx setting";
 tput setaf 7;
+#nginx必要か
 echo "Do you want to setup nginx?:";
 read -r -p "[Y/n] > " yn
 case "$yn" in
 	[Nn]|[Nn][Oo])
+ 		##nginx使わない場合
 		echo "Nginx and Let's encrypt certificate will not be installed.";
 		echo "You should open ports manually.";
 		nginx_local=false;
 		cloudflare=false;
 		certbot=false;
 
+		#ポート指定
 		echo "Misskey port: ";
 		read -r -p "> " -e -i "3000" misskey_port;
 		;;
 	*)
+ 		##nginx使う場合
 		echo "Nginx will be installed on this computer.";
 		echo "Port 80 and 443 will be opened by modifying iptables.";
 		nginx_local=true;
@@ -190,6 +212,7 @@ case "$yn" in
 		tput setaf 3;
 		echo "";
 		tput setaf 7;
+  		#ポート開放設定
 		echo "Do you want it to open ports, to setup ufw or iptables?:";
 		echo "u = To setup ufw / i = To setup iptables / N = Not to open ports";
 
