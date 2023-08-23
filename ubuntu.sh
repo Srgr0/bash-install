@@ -213,11 +213,13 @@ case "$yn" in
 		echo "";
 		tput setaf 7;
   		#ポート開放設定
+		#ufwかiptablesかport開けないか
 		echo "Do you want it to open ports, to setup ufw or iptables?:";
 		echo "u = To setup ufw / i = To setup iptables / N = Not to open ports";
 
 		read -r -p "[u/i/N] > " yn2
 		case "$yn2" in
+			#ufwの場合
 			[Uu])
 				echo "OK, it will use ufw.";
 				ufw=true
@@ -225,6 +227,7 @@ case "$yn" in
 				echo "SSH port: ";
 				read -r -p "> " -e -i "22" ssh_port;
 				;;
+			#iptablesの場合
 			[Ii])
 				echo "OK, it will use iptables.";
 				ufw=false
@@ -233,13 +236,14 @@ case "$yn" in
 				read -r -p "> " -e -i "22" ssh_port;
 				;;
 			*)
+			#port開けない場合
 				echo "OK, you should open ports manually.";
 				ufw=false
 				iptables=false
 				;;
 			esac
 
-		#region certbot
+		#certbotの設定
 		tput setaf 3;
 		echo "";
 		echo "Certbot setting";
@@ -248,18 +252,20 @@ case "$yn" in
 
 		read -r -p "[Y/n] > " yn2
 		case "$yn2" in
+		##certbot使わない場合
 			[Nn]|[Nn][Oo])
 				certbot=false
 				echo "OK, you don't setup certbot.";
 				;;
 			*)
+		##certbot使う場合
 				certbot=true
 				echo "OK, you want to setup certbot.";
 				#endregion
 				;;
 			esac
 
-		#region cloudflare
+		#cloudflareの設定
 		tput setaf 3;
 		echo "";
 		echo "Cloudflare setting";
@@ -268,13 +274,14 @@ case "$yn" in
 
 		read -r -p "[Y/n] > " yn2
 		case "$yn2" in
+		##cloudflare使わない場合
 			[Nn]|[Nn][Oo])
 				echo "OK, you don't use Cloudflare.";
 				echo "Let's encrypt certificate will be installed using the method without Cloudflare.";
 				echo "";
 				echo "Make sure that your DNS is configured to this machine.";
 				cloudflare=false
-
+			##かつcertbot使う場合、メールアドレス入力させる
 				if $certbot; then
 					echo "";
 					echo "Enter Email address to register Let's Encrypt certificate";
@@ -282,6 +289,8 @@ case "$yn" in
 				fi
 				;;
 			*)
+			##cloudflare使う場合
+			#メールアドレスとapikey入力させる
 				cloudflare=true
 				echo "OK, you want to use Cloudflare. Let's set up Cloudflare.";
 				echo "";
@@ -293,6 +302,7 @@ case "$yn" in
 				echo "Cloudflare API Key: ";
 				read -r -p "> " cf_key;
 
+				##入力値をcloudflare.iniに書き込む
 				mkdir -p /etc/cloudflare;
 				cat > /etc/cloudflare/cloudflare.ini <<-_EOF
 				dns_cloudflare_email = $cf_mail
@@ -304,6 +314,7 @@ case "$yn" in
 				;;
 			esac
 
+		##misskeyのポート設定
 		echo "Tell me which port Misskey will watch: ";
 		echo "Misskey port: ";
 		read -r -p "> " -e -i "3000" misskey_port;
@@ -311,60 +322,69 @@ case "$yn" in
 esac
 #endregion
 
-#region postgres
+#postgresqlの設定
 tput setaf 3;
 echo "";
 echo "Database (PostgreSQL) setting";
 tput setaf 7;
+#ローカルでインストールするか
 echo "Do you want to install postgres locally?:";
 echo "(If you have run this script before in this computer, choose n and enter values you have set.)"
 read -r -p "[Y/n] > " yn
 case "$yn" in
+	#ローカルでインストールしない場合
 	[Nn]|[Nn][Oo])
 		echo "You should prepare postgres manually until database is created.";
 		db_local=false;
 
+		#hostとportを尋ねる
 		echo "Database host: ";
 		read -r -p "> " -e -i "$misskey_localhost" db_host;
 		echo "Database port:";
 		read -r -p "> " -e -i "5432" db_port;
 		;;
 	*)
+	#ローカルでインストールする場合
 		echo "PostgreSQL will be installed on this computer at $misskey_localhost:5432.";
 		db_local=true;
 
+		#この場合はmsikkeyと同じホスト、ポート5432
 		db_host=$misskey_localhost;
 		db_port=5432;
 		;;
 esac
 
+#postgresqlのユーザー名、パスワード、データベース名を尋ねる
 echo "Database user name: ";
 read -r -p "> " -e -i "misskey" db_user;
 echo "Database user password: ";
 read -r -p "> " db_pass;
 echo "Database name:";
 read -r -p "> " -e -i "mk1" db_name;
-#endregion
 
-#region redis
+#redisの設定
 tput setaf 3;
 echo "";
 echo "Redis setting";
 tput setaf 7;
+#ローカルでインストールするか
 echo "Do you want to install redis locally?:";
 echo "(If you have run this script before in this computer, choose n and enter values you have set.)"
 read -r -p "[Y/n] > " yn
 case "$yn" in
+	#ローカルでインストールしない場合
 	[Nn]|[Nn][Oo])
 		echo "You should prepare Redis manually.";
 		redis_local=false;
 
+		#hostとportを尋ねる
 		echo "Redis host:";
 		read -r -p "> " -e -i "$misskey_localhost" redis_host;
 		echo "Redis port:";
 		read -r -p "> " -e -i "6379" redis_port;
 		;;
 	*)
+	#ローカルでインストールする場合
 		echo "Redis will be installed on this computer at $misskey_localhost:6379.";
 		redis_local=true;
 
@@ -373,32 +393,37 @@ case "$yn" in
 		;;
 esac
 
+#redisのパスワードを尋ねる
 echo "Redis password:";
 read -r -p "> " redis_pass;
-#endregion
 
+#インストールを開始
 tput setaf 7;
 echo "";
 echo "OK. It will automatically install what you need. This will take some time.";
 echo "";
-#endregion
 
 set -eu;
 
+#ram確認
 tput setaf 2;
 echo "Check: Memory;"
+#トータルのramをGB単位で確認
 mem_all=$(free -t --si -g | tail -n 1);
 mem_allarr=(${mem_all//\\t/ });
 if [ "${mem_allarr[1]}" -ge 3 ]; then
+	#3GB以上でok
 	tput setaf 7;
 	echo "	OK. This computer has ${mem_allarr[1]}GB RAM.";
 else
+	#3GB以下の場合
 	tput setaf 1;
 	echo "	NG. This computer doesn't have enough RAM (>= 2GB, Current ${mem_allarr[1]}GB).";
 	tput setaf 7;
 	mem_swap=$(free | tail -n 1);
 	mem_swaparr=(${mem_swap//\\t/ });
 	if [ "${mem_swaparr[1]}" -eq 0 ]; then
+	#swapｔが0の場合、1Gbか2GBのswapを作成
 		if [ "${mem_allarr[1]}" -ge 2 ]; then
 			echo "	Swap will be made (1M x 1024).";
 			dd if=/dev/zero of=/swap bs=1M count=1024;
@@ -411,6 +436,7 @@ else
 		echo "/swap none swap sw 0" >> /etc/fstab;
 		free -t;
 	else
+	#swapがすでにある場合、増やすように指示して終了
 		echo "  Add more swaps!";
 		exit 1;
 	fi
@@ -428,6 +454,7 @@ echo "misskey_user=\"$misskey_user\"" > /root/.misskey.env
 echo "version=\"$version\"" >> /root/.misskey.env
 m_uid=$(id -u "$misskey_user")
 
+#apt install
 tput setaf 3;
 echo "Process: apt install #1;";
 tput setaf 7;
