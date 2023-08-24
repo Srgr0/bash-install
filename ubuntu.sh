@@ -29,7 +29,7 @@ echo " v$version";
 echo "";
 
 #Linuxでない場合は終了、Ubuntu以外では警告
-#ちゃんと判定できているのか不明
+#!!ちゃんと判定できているのか不明
 tput setaf 2;
 echo "Check: Linux;"
 if [ "$(command -v uname)" ]; then
@@ -135,7 +135,7 @@ if [ $method == "docker" ]; then
 				;;
 		esac
   	#arm64ならビルド
-   	#今はimageあるのでは？
+   	#!!今はimageあるのでは？
 	else
 		echo "We should build docker manually because this is arm64 machine.";
 		method=docker;
@@ -152,7 +152,7 @@ misskey_directory=misskey
 
 ##dockerhubでない場合
 #リポジトリの指定
-#docker(build)の場合は？
+#!!docker(build)の場合は？
 if [ $method != "docker_hub" ]; then
 	#リポジトリ指定
 	echo "Repository url where you want to install:"
@@ -320,7 +320,6 @@ case "$yn" in
 		read -r -p "> " -e -i "3000" misskey_port;
 		;;
 esac
-#endregion
 
 #postgresqlの設定
 tput setaf 3;
@@ -397,6 +396,8 @@ esac
 echo "Redis password:";
 read -r -p "> " redis_pass;
 
+#!!ここで確認画面出した方が良いのでは
+
 #インストールを開始
 tput setaf 7;
 echo "";
@@ -423,7 +424,7 @@ else
 	mem_swap=$(free | tail -n 1);
 	mem_swaparr=(${mem_swap//\\t/ });
 	if [ "${mem_swaparr[1]}" -eq 0 ]; then
-	#swapｔが0の場合、1Gbか2GBのswapを作成
+	#swapが0の場合、1Gbか2GBのswapを作成
 		if [ "${mem_allarr[1]}" -ge 2 ]; then
 			echo "	Swap will be made (1M x 1024).";
 			dd if=/dev/zero of=/swap bs=1M count=1024;
@@ -437,20 +438,25 @@ else
 		free -t;
 	else
 	#swapがすでにある場合、増やすように指示して終了
+	#!!こちらも増やしてしまって良いのでは？
 		echo "  Add more swaps!";
 		exit 1;
 	fi
 fi
 
+#ユーザーの追加
 tput setaf 3;
 echo "Process: add misskey user ($misskey_user);";
 tput setaf 7;
+##既にいる場合は作らない
 if cut -d: -f1 /etc/passwd | grep -q -x "$misskey_user"; then
 	echo "$misskey_user exists already. No user will be created.";
 else
 	useradd -m -U -s /bin/bash "$misskey_user";
 fi
+##envにユーザー名を書き込む
 echo "misskey_user=\"$misskey_user\"" > /root/.misskey.env
+##envにスクリプトのバージョンを書き込む
 echo "version=\"$version\"" >> /root/.misskey.env
 m_uid=$(id -u "$misskey_user")
 
@@ -461,8 +467,10 @@ tput setaf 7;
 apt -qq update -y;
 apt -qq install -y curl nano jq gnupg2 apt-transport-https ca-certificates lsb-release software-properties-common uidmap$($nginx_local && echo " certbot")$($nginx_local && ($ufw && echo " ufw" || $iptables && echo " iptables-persistent"))$($cloudflare && echo " python3-certbot-dns-cloudflare")$([ $method != "docker_hub" ] && echo " git")$([ $method == "systemd" ] && echo " ffmpeg build-essential");
 
+#docker_hubでない場合 = dockerビルドかsystemdの場合
 if [ $method != "docker_hub" ]; then
-#region work with misskey user
+#misskeyユーザーで作業する
+#すでにディレクトリがある場合は削除してから、リポジトリをクローン
 su "$misskey_user" << MKEOF
 set -eu;
 cd ~;
@@ -478,9 +486,10 @@ if [ -e "./$misskey_directory" ]; then
 fi
 git clone -b "$branch" --depth 1 --recursive "$repository" "$misskey_directory";
 MKEOF
-#endregion
+#docker_hubの場合
 else
-#region work with misskey user
+#misskeyユーザーで作業する
+#!!この条件分岐だとすでにファイルがある場合に削除されてディレクトリが作成されない(恐らく考慮不足)
 su "$misskey_user" << MKEOF
 set -eu;
 cd ~;
@@ -499,13 +508,15 @@ else
 	mkdir "./$misskey_directory/.config"
 fi
 MKEOF
-#endregion
 fi
 
+#misskey用configの作成
 tput setaf 3;
 echo "Process: write default.yml;";
 tput setaf 7;
-#region work with misskey user
+#misskeyユーザーで作業する
+#以下の内容をcatして書き込む
+#何気に参考になる書き方
 su "$misskey_user" << MKEOF
 set -eu;
 cd ~;
@@ -551,9 +562,10 @@ proxyBypassHosts:
   - summaly.arkjp.net
 _EOF
 MKEOF
-#endregion
 
+#nginx入れる場合
 if $nginx_local; then
+	#ufwの場合のポート開け
 	if $ufw; then
 		tput setaf 3;
 		echo "Process: port open by ufw;"
@@ -565,6 +577,7 @@ if $nginx_local; then
 		ufw allow 443;
 		ufw --force enable;
 		ufw status;
+	#iptablesの場合のポート開け
 	elif $iptables; then
 		tput setaf 3;
 		echo "Process: port open by iptables;"
@@ -579,6 +592,7 @@ if $nginx_local; then
 		netfilter-persistent reload;
 	fi
 
+#nginxのgpgとリポジトリ追加
 	tput setaf 3;
 	echo "Process: prepare nginx;"
 	tput setaf 7;
@@ -598,11 +612,13 @@ if $nginx_local; then
 fi
 
 if [ $method == "systemd" ]; then
+#systemdの場合、nodejsを入れるための準備をする
 	tput setaf 3;
 	echo "Process: prepare node.js;"
 	tput setaf 7;
 	curl -sL https://deb.nodesource.com/setup_20.x | sudo -E bash -;
 else
+#docker(hub/ビルド)の場合、dockerのgpgとリポジトリ追加
 	tput setaf 3;
 	echo "Process: prepare docker;"
 	tput setaf 7;
@@ -612,6 +628,7 @@ else
 	echo "deb [arch=$arch signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 fi
 
+#redis入れる場合、gpgとリポジトリ追加
 if $redis_local; then
 	tput setaf 3;
 	echo "Process: prepare redis;"
@@ -620,12 +637,15 @@ if $redis_local; then
 	echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list;
 fi
 
+#apt install 2回目
+#必要に応じてnodejs, docker, redis, nginxを入れる
 tput setaf 3;
 echo "Process: apt install #2;"
 tput setaf 7;
 apt -qq update -y;
 apt -qq install -y$([ $method == "systemd" ] && echo " nodejs libjemalloc-dev" || echo " docker-ce docker-ce-cli containerd.io")$($redis_local && echo " redis")$($nginx_local && echo " nginx");
 
+#systemdの場合、corepackを有効化する
 if [ $method == "systemd" ]; then
 	tput setaf 3;
 	echo "Process: corepack enable;"
@@ -633,6 +653,7 @@ if [ $method == "systemd" ]; then
 	corepack enable;
 fi
 
+#バージョン表示
 echo "Display: Versions;"
 if [ $method == "systemd" ]; then
 	echo "node";
@@ -652,6 +673,7 @@ if $nginx_local; then
 	nginx -v;
 fi
 
+#redis-serverのserviceを有効化
 if $redis_local; then
 	tput setaf 3;
 	echo "Process: daemon activate: redis;"
@@ -659,7 +681,10 @@ if $redis_local; then
 	systemctl start redis-server;
 	systemctl enable redis-server;
 fi
-#region nginx_setup
+
+#nginxの設定
+#/etc/nginx/conf.d/$host.confに書き込む
+#certbotでcloudflare認証使わない場合にweb認証を使うために必要
 if $nginx_local; then
 tput setaf 3;
 echo "Process: create nginx config;"
@@ -689,17 +714,19 @@ server {
 
 NGEOF
 
-#region certbot_setup
+#certbotの設定
 if $certbot; then
 tput setaf 3;
 echo "Process: add nginx config (certbot-1);"
 tput setaf 7;
+#httpsにリダイレクトするようにnginxのconfigを書き換え
 cat >> "/etc/nginx/conf.d/$host.conf" << NGEOF
 	# with https
     location / { return 301 https://\$server_name\$request_uri; }
 }
 NGEOF
 
+#証明書取得
 tput setaf 3;
 echo "Process: prepare certificate;"
 tput setaf 7;
@@ -712,6 +739,7 @@ else
 	certbot certonly -t -n --agree-tos --webroot --webroot-path /var/www/html $([ ${#hostarr[*]} -eq 2 ] && echo " -d $host" || echo " -d $host") -m "$cf_mail";
 fi
 
+#https対応するようにnginxのconfigを書き換え
 tput setaf 3;
 echo "Process: add nginx config (certbot-2);"
 tput setaf 7;
@@ -736,9 +764,9 @@ server {
     ssl_stapling on;
     ssl_stapling_verify on;
 NGEOF
-fi
-#endregion
+fi #certbotのif終了
 
+#nginx.confにmisskeyを登録
 tput setaf 3;
 echo "Process: add nginx config;"
 tput setaf 7;
@@ -772,8 +800,10 @@ $($cloudflare || echo "        proxy_set_header X-Forwarded-Proto https;")
 }
 NGEOF
 
+#nginx.confの構文チェック
 nginx -t;
 
+#nginxのserviceを有効化
 tput setaf 3;
 echo "Process: daemon activate: nginx;"
 tput setaf 7;
@@ -781,6 +811,8 @@ tput setaf 7;
 systemctl restart nginx;
 systemctl enable nginx;
 
+#localhostにアクセスしてnginxから返ってくるか確認
+#確認方法が甘いかも
 tput setaf 2;
 echo "Check: localhost returns nginx;";
 tput setaf 7;
@@ -792,9 +824,9 @@ else
 	exit 1;
 fi
 
-fi
-#endregion
+fi #nginxのif終了
 
+#postgresqlの設定
 if $db_local; then
 	tput setaf 3;
 	echo "Process: install postgres;"

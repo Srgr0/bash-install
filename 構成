@@ -1,0 +1,64 @@
+構成
+
+1. f/スクリプトの概要を表示
+2. b/linux, root, arch判定
+3. f/オプション選択
+#この部分、compose.yaml読めるようにすると便利そう
+ i. Docker or Systemd
+  docker
+  1. hubから持ってくるかビルドするか
+  2. hubならdockerhubリポジトリ入力、ビルドならgithubリポジトリ入力
+  Systemd
+  1. githubリポジトリ入力
+ ii. 実行ユーザー名
+ iii. ホスト名
+ iv. nginx入れるか
+  入れない
+  1. nginx, cloudflare, certbotをfalseに
+  2. ポート指定
+  入れる
+  1. ポート開けるか(ufw/iptables/no)、開ける場合はsshポートも聞く
+  2. certbot入れるか
+  3. cloudflare入れるか
+   入れない
+   i. certbot使うならメールアドレスを聞く
+   入れる
+   i. メルアドとapikeyを聞く
+   ii. cloudflare.iniに書き込む
+  4. ポート指定
+ v. postgresql入れるか
+  入れない
+  1. hostとportを聞く
+  入れる
+  1. hostはmisskeyと同じ、portは5432
+ vi. postgresqlのユーザー名とパスワード、db名を聞く
+ vii. redis入れるか
+  入れない
+  1. hostとportを聞く
+  入れる
+  1. hostはmisskeyと同じ、portは6379
+ viii. redisのパスワードを聞く
+#ここで確認画面を出した方がいい
+4. b/インストール
+ i. RAM確認(必要に応じてswapを作成)
+ ii. ユーザー追加
+ iii. envにスクリプトの情報を書き込む(バージョンと実行ユーザー)
+ iv. apt install(一部パッケージは条件分岐)
+ v. ディレクトリがすでにある場合は削除
+ vi. systemdかdockerビルドの場合、リポジトリをクローン
+ vii. config.yamlを作成 #権限緩い(chmod600必要)
+ viii. nginx入れる場合、ポートを開けて、gpgとリポジトリを追加
+ ix. systemdの場合、nodejsのセットアップをする(インストールの前段階)。docker(hub/ビルド)の場合、gpgとリポジトリを追加
+ x. redis入れる場合、gpgとリポジトリを追加
+ xi. apt install 2回目
+ xii. systemdの場合、corepackを有効化する
+ xiii. 入れたもののバージョンを表示
+ xiv. redis入れる場合、redis-serverのservice有効化
+ xv. nginx入れる場合
+  1. configファイルを作成 #certbotでcloudflare認証使わない場合に、web認証のために:80でアクセス受け付けないといけないため
+  2. certbot入れる場合、証明書取得してnginx.confファイルを設定
+  3. misskeyをnginx.confに設定
+  4. nginx.confの構文チェック
+  5. nginxのserviceを有効化
+ xvi. postgresql入れる場合、インストールしてDBとユーザーを作成
+ 
