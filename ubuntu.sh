@@ -261,7 +261,6 @@ case "$yn" in
 		##certbot使う場合
 				certbot=true
 				echo "OK, you want to setup certbot.";
-				#endregion
 				;;
 			esac
 
@@ -310,7 +309,6 @@ case "$yn" in
 				_EOF
 
 				chmod 600 /etc/cloudflare/cloudflare.ini;
-				#endregion
 				;;
 			esac
 
@@ -840,16 +838,19 @@ if $db_local; then
 	sudo -iu postgres psql -c "CREATE ROLE $db_user LOGIN PASSWORD '$db_pass';" -c "CREATE DATABASE $db_name OWNER $db_user;"
 fi
 
-#region docker setting
+#dockerの設定
 if [ $method != "systemd" ]; then
-	#region enable rootless docker
 	tput setaf 3;
 	echo "Process: use rootless docker;"
 	tput setaf 7;
 
+	#misskeyユーザーでdockerを実行させる
 	systemctl disable --now docker.service docker.socket
+	##misskeyユーザーのログインを有効化
 	loginctl enable-linger "$misskey_user"
 	sleep 5
+	#misskeyユーザーで実行
+	#dockerd-rootless-setuptool.shは/usr/binにある(パスが通っている)
 	su "$misskey_user" <<-MKEOF
 	set -eu;
 	cd ~;
@@ -864,17 +865,19 @@ if [ $method != "systemd" ]; then
 	tput setaf 7;
 	docker ps;
 	MKEOF
-	#endregion
 
-	#region modify postgres confs
+	#postgresqlの設定
 	if $db_local; then
 		tput setaf 3;
 		echo "Process: modify postgres confs;"
 		tput setaf 7;
+		#pg_hba.confを探す
 		pg_hba=$(sudo -iu postgres psql -t -P format=unaligned -c 'show hba_file')
+		#postgresql.confを探す
 		pg_conf=$(sudo -iu postgres psql -t -P format=unaligned -c 'show config_file')
 		[[ $(ip addr | grep "$docker_host_ip") =~ /([0-9]+) ]] && subnet=${BASH_REMATCH[1]};
 
+		#すでに追加されていない場合、pg_hba.confに設定を追加
 		hba_text="host $db_name $db_user $docker_host_ip/$subnet md5"
 		if ! grep "$hba_text" "$pg_hba"; then
 			echo "$hba_text" >> "$pg_hba";
@@ -882,10 +885,13 @@ if [ $method != "systemd" ]; then
 
 		pgconf_search="#listen_addresses = 'localhost'"
 		pgconf_text="listen_addresses = '$docker_host_ip'"
+		#listen addressがlocalhostになっている場合、dockerのipに置き換え
 		if grep "$pgconf_search" "$pg_conf"; then
 			sed -i'.mkmoded' -e "s/$pgconf_search/$pgconf_text/g" "$pg_conf";
+		#すでにdockerのipになっている場合、skip
 		elif grep "$pgconf_text" "$pg_conf"; then
 			echo "	skip"
+		#それ以外の場合、ユーザーに指示を仰ぐ
 		else
 			echo "Please edit postgresql.conf to set [listen_addresses = '$docker_host_ip'] by your hand."
 			read -r -p "Enter the editor command and press Enter key > " -e -i "nano" editorcmd
@@ -894,24 +900,26 @@ if [ $method != "systemd" ]; then
 
 		systemctl restart postgresql;
 	fi
-	#endregion
 fi
-#endregion
 
-#region modify redis conf
+#redisの設定
 if $redis_local; then
 	tput setaf 3;
 	echo "Process: modify redis confs;"
 	tput setaf 7;
+	#すでにredis.confがある場合
 	if [ -f /etc/redis/redis.conf ]; then
+		#passwordと(dockerの場合)dockerのipを追加
 		echo "requirepass $redis_pass" > /etc/redis/misskey.conf
 		[ $method != "systemd" ] && echo "bind $docker_host_ip" >> /etc/redis/misskey.conf
 
+		#misskey.confがredis.confに追加されていない場合、追加
 		if ! grep "include /etc/redis/misskey.conf" /etc/redis/redis.conf; then
 			echo "include /etc/redis/misskey.conf" >> /etc/redis/redis.conf;
 		else
 			echo "	skip"
 		fi
+	#redis.confがない場合、ユーザーに編集を促す
 	else
 		echo "Couldn't find /etc/redis/redis.conf."
 		echo "Please modify redis config in another shell like following."
@@ -923,11 +931,10 @@ if $redis_local; then
 	fi
 	systemctl restart redis-server;
 fi
-#endregion
 
+#systemdの場合、misskeyのセットアップ
 if [ $method == "systemd" ]; then
-#region systemd
-#region work with misskey user
+#misskeyのセットアップ
 su "$misskey_user" << MKEOF;
 set -eu;
 cd ~
@@ -958,8 +965,8 @@ else
 	echo "	NG.";
 fi
 MKEOF
-#endregion
 
+#serviceの作成
 tput setaf 3;
 echo "Process: create misskey daemon;"
 tput setaf 7;
@@ -989,19 +996,18 @@ systemctl enable "$host";
 systemctl start "$host";
 systemctl status "$host" --no-pager;
 
-#endregion
+#docker(ビルド)の場合、misskeyのセットアップ
 elif [ $method == "docker" ]; then
-#region docker build
 tput setaf 3;
 echo "Process: build docker image;"
 tput setaf 7;
 
 sudo -iu "$misskey_user" XDG_RUNTIME_DIR=/run/user/$m_uid DOCKER_HOST=unix:///run/user/$m_uid/docker.sock docker build -t $docker_repository "/home/$misskey_user/$misskey_directory";
-#endregion
 fi
 
 echo "";
 
+#docker(hub/ビルド)の場合
 if [ $method != "systemd" ]; then
 tput setaf 2;
 tput bold;
@@ -1020,8 +1026,10 @@ echo ""
 tput setaf 3;
 echo "Process: docker run;"
 tput setaf 7;
+#dockerコンテナの立ち上げ
 docker_container=$(sudo -iu "$misskey_user" XDG_RUNTIME_DIR=/run/user/$m_uid DOCKER_HOST=unix:///run/user/$m_uid/docker.sock docker run -d -p $misskey_port:$misskey_port --add-host=$misskey_localhost:$docker_host_ip -v "/home/$misskey_user/$misskey_directory/files":/misskey/files -v "/home/$misskey_user/$misskey_directory/.config/default.yml":/misskey/.config/default.yml:ro --restart unless-stopped -t "$docker_repository");
 echo "$docker_container";
+#envの作成(misskey実行ユーザーのhomedic)
 su "$misskey_user" << MKEOF
 set -eu;
 cd ~;
@@ -1043,10 +1051,11 @@ version="$version"
 _EOF
 MKEOF
 
+#dockerのログを表示
 sudo -iu "$misskey_user" XDG_RUNTIME_DIR=/run/user/$m_uid DOCKER_HOST=unix:///run/user/$m_uid/docker.sock docker logs -f $docker_container;
 
 else
-
+#systemdの場合、envの作成(misskey実行ユーザーのhomedic)
 su "$misskey_user" << MKEOF
 set -eu;
 cd ~;

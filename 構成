@@ -61,4 +61,8 @@
   4. nginx.confの構文チェック
   5. nginxのserviceを有効化
  xvi. postgresql入れる場合、インストールしてDBとユーザーを作成
- 
+ xvii. docker使う場合、misskeyユーザーで実行するように設定
+ xviii. postgresql使う場合、pg_hba.confとpostgresql.confを設定
+ xix. redis使う場合、redis.confを設定
+ xx. systemdの場合、セットアップ&service作成、docker(ビルド)の場合、dockerのビルド
+ xxi. 
