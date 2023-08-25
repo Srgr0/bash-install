@@ -18,9 +18,11 @@
 # DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #
+#スクリプトのバージョン
 version="3.2.0";
 
 tput setaf 2;
+#rootかどうか確認
 echo "Check: root user;";
 if [ "$(whoami)" != 'root' ]; then
 	tput setaf 1;
@@ -31,16 +33,22 @@ else
 	echo "	OK. I am root user.";
 fi
 
+#/root/.misskey.envを読み込む
 tput setaf 3;
 echo "Process: import environment and detect method;";
 tput setaf 7;
+##/root/.misskey.envが存在する場合
 if [ -f "/root/.misskey.env" ]; then
+	#/root/.misskey.envを読み込む
 	. "/root/.misskey.env";
+	#/home/$misskey_user/.misskey.envがあるなら読み込む
 	if [ -f "/home/$misskey_user/.misskey.env" ]; then
 		. "/home/$misskey_user/.misskey.env";
 		method=systemd;
+	#/home/$misskey_user/.misskey-docker.envがあるなら読み込む
 	elif [ -f "/home/$misskey_user/.misskey-docker.env" ]; then
 		. "/home/$misskey_user/.misskey-docker.env";
+	#両方ないなら既定値
 	else
 		misskey_user=misskey;
 		misskey_directory=misskey;
@@ -48,6 +56,7 @@ if [ -f "/root/.misskey.env" ]; then
 		method=systemd;
 		echo "use default";
 	fi
+#/root/.misskey.envがないなら既定値
 else
 	misskey_user=misskey;
 	misskey_directory=misskey;
@@ -56,14 +65,16 @@ else
 	echo "use default";
 fi
 
+#読み取った値を出力
+#ここで確認出した方がよいのでは？
 echo "method: $method / user: $misskey_user / dir: $misskey_directory / $misskey_localhost:$misskey_port";
 
+#systemdの場合
 if [ $method == "systemd" ]; then
-#region systemd
 tput setaf 3;
 echo "Process: update (systemd);";
 tput setaf 7;
-#region work with misskey user
+#git pull
 su "$misskey_user" << MKEOF
 set -eu;
 cd ~/$misskey_directory;
@@ -74,14 +85,14 @@ tput setaf 7;
 git pull;
 git submodule update --init;
 MKEOF
-#endregion
 
+#serviceを止める
 tput setaf 3;
 echo "Process: stop daemon;";
 tput setaf 7;
 systemctl stop "$host"
 
-#region work with misskey user
+#misskeyのセットアップ
 su "$misskey_user" << MKEOF
 set -eu;
 cd ~/$misskey_directory;
@@ -106,8 +117,9 @@ echo "Process: migrate db;";
 tput setaf 7;
 NODE_OPTIONS=--max_old_space_size=3072 pnpm run migrate;
 MKEOF
-#endregion
 
+#-r付きで実行された場合、apt upgradeを実行して再起動
+#-r付きでない場合、serviceを起動
 if [ $# == 1 ] && [ $1 == "-r" ]; then
 	tput setaf 3;
 	echo "Process: apt upgrade;";
@@ -125,51 +137,63 @@ else
 	tput setaf 7;
 	systemctl start "$host";
 fi
-#endregion
+
+#docker(hub/ビルド)の場合
 else
+	#misskeyユーザーのidと今まで使われていたイメージを取得
 	m_uid=$(id -u "$misskey_user");
 	oldid=$(sudo -iu "$misskey_user" XDG_RUNTIME_DIR=/run/user/$m_uid DOCKER_HOST=unix:///run/user/$m_uid/docker.sock docker images --no-trunc --format "{{.ID}}" $docker_repository);
 
+	#docker(ビルド)の場合
 	if [ $method == "docker" ]; then
 		tput setaf 3;
 		echo "Process: docker build;";
 		tput setaf 7;
+		#scriptに渡された因数が1つならそれを、ないならlocal/misskey:latestをdocker_repositoryに代入
 		if [ $# == 1 ]; then
 			docker_repository="$1";
 		else
 			docker_repository="local/misskey:latest";
 		fi
 
+		#ビルド
 		sudo -iu "$misskey_user" XDG_RUNTIME_DIR=/run/user/$m_uid DOCKER_HOST=unix:///run/user/$m_uid/docker.sock docker build -t $docker_repository "/home/$misskey_user/$misskey_directory";
 
+	#docker(hub)の場合
 	else
 		tput setaf 3;
 		echo "Process: docker pull;";
 		tput setaf 7;
+		#scriptに渡された因数が1つならそれを、ないならmisskey/misskey:latestをdocker_repositoryに代入
 		if [ $# == 1 ]; then
 			docker_repository="$1";
 		else
 			docker_repository="misskey/misskey:latest";
 		fi
 
+		#pull
 		sudo -iu "$misskey_user" XDG_RUNTIME_DIR=/run/user/$m_uid DOCKER_HOST=unix:///run/user/$m_uid/docker.sock docker pull "$docker_repository";
 	fi
 
+#新しいコンテナを起動
 	tput setaf 3;
 	echo "Process: docker run;";
 	tput setaf 7;
 	docker_new_container=$(sudo -iu "$misskey_user" XDG_RUNTIME_DIR=/run/user/$m_uid DOCKER_HOST=unix:///run/user/$m_uid/docker.sock docker run -d -p $misskey_port:$misskey_port --add-host=$misskey_localhost:$docker_host_ip -v /home/$misskey_user/$misskey_directory/files:/misskey/files -v "/home/$misskey_user/$misskey_directory/.config/default.yml":/misskey/.config/default.yml:ro --restart unless-stopped -t "$docker_repository");
 
+#古いコンテナを削除
 	tput setaf 3;
 	echo "Process: docker rm container;";
 	tput setaf 7;
 	sudo -iu "$misskey_user" XDG_RUNTIME_DIR=/run/user/$m_uid DOCKER_HOST=unix:///run/user/$m_uid/docker.sock docker rm -f "$docker_container";
 
+#イメージの整理
 	tput setaf 3;
 	echo "Process: docker image prune;";
 	tput setaf 7;
 	sudo -iu "$misskey_user" XDG_RUNTIME_DIR=/run/user/$m_uid DOCKER_HOST=unix:///run/user/$m_uid/docker.sock docker image prune -f;
 
+#/home/$misskey_user/.misskey-docker.envを新規作成(上書き)
 	su "$misskey_user" <<-MKEOF
 	set -eu;
 	cd ~;
@@ -191,6 +215,7 @@ else
 	_EOF
 	MKEOF
 
+#今まで使っていたイメージを削除
 	tput setaf 3;
 	echo "Process: docker remove image;";
 	tput setaf 7;
