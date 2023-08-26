@@ -3,7 +3,7 @@
 1. f/スクリプトの概要を表示
 2. b/linux, root, arch判定
 3. f/オプション選択
-#この部分、compose.yaml読めるようにすると便利そう
+#この部分、compose.yaml読める/オプション指定できるようにすると便利そう
  i. Docker or Systemd
   docker
   1. hubから持ってくるかビルドするか
@@ -19,7 +19,7 @@
   入れる
   1. ポート開けるか(ufw/iptables/no)、開ける場合はsshポートも聞く
   2. certbot入れるか
-  3. cloudflare入れるか
+  3. cloudflare入れるか #cloudflare tunnelではなくcloudflare dnsを使っているか
    入れない
    i. certbot使うならメールアドレスを聞く
    入れる
@@ -46,13 +46,13 @@
  iv. apt install(一部パッケージは条件分岐)
  v. ディレクトリがすでにある場合は削除
  vi. systemdかdockerビルドの場合、リポジトリをクローン
- vii. config.yamlを作成 #権限緩い(chmod600必要)
+ vii. misskey用のconfig.yamlを作成 #権限緩い(chmod600必要)
  viii. nginx入れる場合、ポートを開けて、gpgとリポジトリを追加
  ix. systemdの場合、nodejsのセットアップをする(インストールの前段階)。docker(hub/ビルド)の場合、gpgとリポジトリを追加
  x. redis入れる場合、gpgとリポジトリを追加
  xi. apt install 2回目
  xii. systemdの場合、corepackを有効化する
- xiii. 入れたもののバージョンを表示
+ xiii. 入れたもののバージョンを表示(インストール確認)
  xiv. redis入れる場合、redis-serverのservice有効化
  xv. nginx入れる場合
   1. configファイルを作成 #certbotでcloudflare認証使わない場合に、web認証のために:80でアクセス受け付けないといけないため
@@ -61,8 +61,7 @@
   4. nginx.confの構文チェック
   5. nginxのserviceを有効化
  xvi. postgresql入れる場合、インストールしてDBとユーザーを作成
- xvii. docker使う場合、misskeyユーザーで実行するように設定
- xviii. postgresql使う場合、pg_hba.confとpostgresql.confを設定
+ xvii. docker使う場合、misskeyユーザーで実行するように設定、さらにpostgresql使う場合、pg_hba.confとpostgresql.confを設定
  xix. redis使う場合、redis.confを設定
  xx. systemdの場合、セットアップ&service作成、docker(ビルド)の場合、dockerのビルド
- xxi. 
+ xxi. dockerの場合、コンテナ立ち上げてenv作成してログ表示、systemdの場合env作成
